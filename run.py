@@ -74,50 +74,53 @@ def test(model, test_loader):
 
 # 不同标签正确率下的训练 & 测试
 ratios = [0.05, 0.1, 0.2, 0.4,0.8, 1.0]
-# 存储不同 ratio 下的干净和噪声验证集准确率
+# 存储不同 ratio 下的干净验证集、噪声验证集、训练集准确率
 dic_clean = {}
 dic_noisy = {}
+dic_train = {}
 
 for r in ratios:
     train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
     test_dataset_clean = datasets.MNIST('./data', train=False, transform=transform)
     noisy_test_dataset = datasets.MNIST('./data', train=False, transform=transform)
 
-    # 制造训练集和 noisy 验证集的标签噪声
     corrupt_labels(train_dataset, correct_ratio=r)
     corrupt_labels(noisy_test_dataset, correct_ratio=r)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_loader_clean = torch.utils.data.DataLoader(test_dataset_clean, batch_size=1000, shuffle=False)
     test_loader_noisy = torch.utils.data.DataLoader(noisy_test_dataset, batch_size=1000, shuffle=False)
+    train_loader_eval = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=False)
 
     model = SimpleCNN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
     accs_clean = []
     accs_noisy = []
+    accs_train = []
 
-    for epoch in range(1, 21):  # 可以先改成 5
+    for epoch in range(1, 21):  # 建议先调小到 5 方便测试
         train(model, train_loader, optimizer, epoch)
 
-        # 干净验证集
-        acc_clean = test(model, test_loader_clean)
-        # 被污染验证集
-        acc_noisy = test(model, test_loader_noisy)
+        acc_train = test(model, train_loader_eval)   # 训练集准确率
+        acc_clean = test(model, test_loader_clean)   # 干净验证集
+        acc_noisy = test(model, test_loader_noisy)   # 噪声验证集
 
+        accs_train.append(acc_train)
         accs_clean.append(acc_clean)
         accs_noisy.append(acc_noisy)
 
-        print(f"Ratio={r}, Epoch={epoch}, Clean Acc={acc_clean:.4f}, Noisy Acc={acc_noisy:.4f}")
+        print(f"Ratio={r}, Epoch={epoch}, "
+              f"Train Acc={acc_train:.4f}, Clean Acc={acc_clean:.4f}, Noisy Acc={acc_noisy:.4f}")
 
+    dic_train[r] = accs_train
     dic_clean[r] = accs_clean
     dic_noisy[r] = accs_noisy
 
 
-# 画图
+# 图1：干净验证集 vs 噪声验证集
 fig, axs = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
 
-# 左图：干净验证集
 for r, accs in dic_clean.items():
     axs[0].plot(range(1, len(accs)+1), accs, marker='o', label=f"ratio={r}")
 axs[0].set_title("Accuracy on Clean Validation Set")
@@ -126,7 +129,6 @@ axs[0].set_ylabel("Accuracy")
 axs[0].grid(True)
 axs[0].legend()
 
-# 右图：被污染验证集
 for r, accs in dic_noisy.items():
     axs[1].plot(range(1, len(accs)+1), accs, marker='x', linestyle='--', label=f"ratio={r}")
 axs[1].set_title("Accuracy on Noisy Validation Set")
@@ -134,6 +136,18 @@ axs[1].set_xlabel("Epoch")
 axs[1].grid(True)
 axs[1].legend()
 
-plt.suptitle("Effect of Label Noise on MNIST")
+plt.suptitle("Effect of Label Noise on MNIST (Validation Sets)")
 plt.tight_layout()
+plt.show()
+
+
+# 图2：训练集准确率
+plt.figure(figsize=(8, 6))
+for r, accs in dic_train.items():
+    plt.plot(range(1, len(accs)+1), accs, marker='s', label=f"ratio={r}")
+plt.title("Accuracy on Training Set")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.grid(True)
+plt.legend()
 plt.show()
